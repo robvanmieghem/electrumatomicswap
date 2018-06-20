@@ -22,11 +22,11 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	rpc "github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
+	rpc "github.com/robvanmieghem/electrumatomicswap/cmd/btcatomicswap/rpcclient"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -42,7 +42,7 @@ var (
 
 var (
 	flagset     = flag.NewFlagSet("", flag.ExitOnError)
-	connectFlag = flagset.String("s", "localhost", "host[:port] of Bitcoin Core wallet RPC server")
+	connectFlag = flagset.String("s", "localhost", "host[:port] of Electrum wallet RPC server")
 	rpcuserFlag = flagset.String("rpcuser", "", "username for wallet RPC authentication")
 	rpcpassFlag = flagset.String("rpcpass", "", "password for wallet RPC authentication")
 	testnetFlag = flagset.Bool("testnet", false, "use testnet network")

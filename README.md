@@ -9,4 +9,4 @@ the following coins and wallets:
 * Bitcoin ([Electrum](https://electrum.org/))
 * Litecoin ([Electrum-ltc](https://electrum-ltc.org))
 
-The swaps are compatible with te tools. performed by the Decred swaps
+The swaps are compatible with the ones performed by the Decred swap tools.
