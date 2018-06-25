@@ -130,7 +130,7 @@ type auditContractCmd struct {
 }
 
 func main() {
-	err, showUsage := run()
+	showUsage, err := run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
@@ -154,11 +154,11 @@ func checkCmdArgLength(args []string, required int) (nArgs int) {
 	return required
 }
 
-func run() (err error, showUsage bool) {
+func run() (showUsage bool, err error) {
 	flagset.Parse(os.Args[1:])
 	args := flagset.Args()
 	if len(args) == 0 {
-		return nil, true
+		return true, nil
 	}
 	cmdArgs := 0
 	switch args[0] {
@@ -175,15 +175,15 @@ func run() (err error, showUsage bool) {
 	case "auditcontract":
 		cmdArgs = 2
 	default:
-		return fmt.Errorf("unknown command %v", args[0]), true
+		return true, fmt.Errorf("unknown command %v", args[0])
 	}
 	nArgs := checkCmdArgLength(args[1:], cmdArgs)
 	flagset.Parse(args[1+nArgs:])
 	if nArgs < cmdArgs {
-		return fmt.Errorf("%s: too few arguments", args[0]), true
+		return true, fmt.Errorf("%s: too few arguments", args[0])
 	}
 	if flagset.NArg() != 0 {
-		return fmt.Errorf("unexpected argument: %s", flagset.Arg(0)), true
+		return true, fmt.Errorf("unexpected argument: %s", flagset.Arg(0))
 	}
 
 	if *testnetFlag {
@@ -195,24 +195,24 @@ func run() (err error, showUsage bool) {
 	case "initiate":
 		cp2Addr, err := btcutil.DecodeAddress(args[1], chainParams)
 		if err != nil {
-			return fmt.Errorf("failed to decode participant address: %v", err), true
+			return true, fmt.Errorf("failed to decode participant address: %v", err)
 		}
 		if !cp2Addr.IsForNet(chainParams) {
-			return fmt.Errorf("participant address is not "+
-				"intended for use on %v", chainParams.Name), true
+			return true, fmt.Errorf("participant address is not "+
+				"intended for use on %v", chainParams.Name)
 		}
 		cp2AddrP2PKH, ok := cp2Addr.(*btcutil.AddressPubKeyHash)
 		if !ok {
-			return errors.New("participant address is not P2PKH"), true
+			return true, errors.New("participant address is not P2PKH")
 		}
 
 		amountF64, err := strconv.ParseFloat(args[2], 64)
 		if err != nil {
-			return fmt.Errorf("failed to decode amount: %v", err), true
+			return true, fmt.Errorf("failed to decode amount: %v", err)
 		}
 		amount, err := btcutil.NewAmount(amountF64)
 		if err != nil {
-			return err, true
+			return true, err
 		}
 
 		cmd = &initiateCmd{cp2Addr: cp2AddrP2PKH, amount: amount}
@@ -220,32 +220,32 @@ func run() (err error, showUsage bool) {
 	case "participate":
 		cp1Addr, err := btcutil.DecodeAddress(args[1], chainParams)
 		if err != nil {
-			return fmt.Errorf("failed to decode initiator address: %v", err), true
+			return true, fmt.Errorf("failed to decode initiator address: %v", err)
 		}
 		if !cp1Addr.IsForNet(chainParams) {
-			return fmt.Errorf("initiator address is not "+
-				"intended for use on %v", chainParams.Name), true
+			return true, fmt.Errorf("initiator address is not "+
+				"intended for use on %v", chainParams.Name)
 		}
 		cp1AddrP2PKH, ok := cp1Addr.(*btcutil.AddressPubKeyHash)
 		if !ok {
-			return errors.New("initiator address is not P2PKH"), true
+			return true, errors.New("initiator address is not P2PKH")
 		}
 
 		amountF64, err := strconv.ParseFloat(args[2], 64)
 		if err != nil {
-			return fmt.Errorf("failed to decode amount: %v", err), true
+			return true, fmt.Errorf("failed to decode amount: %v", err)
 		}
 		amount, err := btcutil.NewAmount(amountF64)
 		if err != nil {
-			return err, true
+			return true, err
 		}
 
 		secretHash, err := hex.DecodeString(args[3])
 		if err != nil {
-			return errors.New("secret hash must be hex encoded"), true
+			return true, errors.New("secret hash must be hex encoded")
 		}
 		if len(secretHash) != sha256.Size {
-			return errors.New("secret hash has wrong size"), true
+			return true, errors.New("secret hash has wrong size")
 		}
 
 		cmd = &participateCmd{cp1Addr: cp1AddrP2PKH, amount: amount, secretHash: secretHash}
@@ -253,22 +253,22 @@ func run() (err error, showUsage bool) {
 	case "redeem":
 		contract, err := hex.DecodeString(args[1])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract: %v", err), true
+			return true, fmt.Errorf("failed to decode contract: %v", err)
 		}
 
 		contractTxBytes, err := hex.DecodeString(args[2])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 		var contractTx wire.MsgTx
 		err = contractTx.Deserialize(bytes.NewReader(contractTxBytes))
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 
 		secret, err := hex.DecodeString(args[3])
 		if err != nil {
-			return fmt.Errorf("failed to decode secret: %v", err), true
+			return true, fmt.Errorf("failed to decode secret: %v", err)
 		}
 
 		cmd = &redeemCmd{contract: contract, contractTx: &contractTx, secret: secret}
@@ -276,17 +276,17 @@ func run() (err error, showUsage bool) {
 	case "refund":
 		contract, err := hex.DecodeString(args[1])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract: %v", err), true
+			return true, fmt.Errorf("failed to decode contract: %v", err)
 		}
 
 		contractTxBytes, err := hex.DecodeString(args[2])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 		var contractTx wire.MsgTx
 		err = contractTx.Deserialize(bytes.NewReader(contractTxBytes))
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 
 		cmd = &refundCmd{contract: contract, contractTx: &contractTx}
@@ -294,20 +294,20 @@ func run() (err error, showUsage bool) {
 	case "extractsecret":
 		redemptionTxBytes, err := hex.DecodeString(args[1])
 		if err != nil {
-			return fmt.Errorf("failed to decode redemption transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode redemption transaction: %v", err)
 		}
 		var redemptionTx wire.MsgTx
 		err = redemptionTx.Deserialize(bytes.NewReader(redemptionTxBytes))
 		if err != nil {
-			return fmt.Errorf("failed to decode redemption transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode redemption transaction: %v", err)
 		}
 
 		secretHash, err := hex.DecodeString(args[2])
 		if err != nil {
-			return errors.New("secret hash must be hex encoded"), true
+			return true, errors.New("secret hash must be hex encoded")
 		}
 		if len(secretHash) != sha256.Size {
-			return errors.New("secret hash has wrong size"), true
+			return true, errors.New("secret hash has wrong size")
 		}
 
 		cmd = &extractSecretCmd{redemptionTx: &redemptionTx, secretHash: secretHash}
@@ -315,17 +315,17 @@ func run() (err error, showUsage bool) {
 	case "auditcontract":
 		contract, err := hex.DecodeString(args[1])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract: %v", err), true
+			return true, fmt.Errorf("failed to decode contract: %v", err)
 		}
 
 		contractTxBytes, err := hex.DecodeString(args[2])
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 		var contractTx wire.MsgTx
 		err = contractTx.Deserialize(bytes.NewReader(contractTxBytes))
 		if err != nil {
-			return fmt.Errorf("failed to decode contract transaction: %v", err), true
+			return true, fmt.Errorf("failed to decode contract transaction: %v", err)
 		}
 
 		cmd = &auditContractCmd{contract: contract, contractTx: &contractTx}
@@ -333,12 +333,12 @@ func run() (err error, showUsage bool) {
 
 	// Offline commands don't need to talk to the wallet.
 	if cmd, ok := cmd.(offlineCommand); ok {
-		return cmd.runOfflineCommand(), false
+		return false, cmd.runOfflineCommand()
 	}
 
 	connect, err := normalizeAddress(*connectFlag, walletPort(chainParams))
 	if err != nil {
-		return fmt.Errorf("wallet server address: %v", err), true
+		return true, fmt.Errorf("wallet server address: %v", err)
 	}
 
 	connConfig := &rpc.ConnConfig{
@@ -350,7 +350,7 @@ func run() (err error, showUsage bool) {
 	}
 	client, err := rpc.New(connConfig)
 	if err != nil {
-		return fmt.Errorf("rpc connect: %v", err), false
+		return false, fmt.Errorf("rpc connect: %v", err)
 	}
 	defer func() {
 		client.Shutdown()
@@ -358,7 +358,7 @@ func run() (err error, showUsage bool) {
 	}()
 
 	err = cmd.runCommand(client)
-	return err, false
+	return false, err
 }
 
 func normalizeAddress(addr string, defaultPort string) (hostport string, err error) {
@@ -458,8 +458,8 @@ func getFeePerKb(c *rpc.Client) (feerate btcutil.Amount, err error) {
 	return c.GetFeeRate()
 }
 
-// getRawChangeAddress uses  the getunusedeaddress JSON-RPC method.
-func getRawChangeAddress(c *rpc.Client) (btcutil.Address, error) {
+// getUnusedAddress uses the getunusedeaddress JSON-RPC method.
+func getUnusedAddress(c *rpc.Client) (btcutil.Address, error) {
 	addr, err := c.GetUnusedAddress()
 	if err != nil {
 		return nil, err
@@ -469,7 +469,7 @@ func getRawChangeAddress(c *rpc.Client) (btcutil.Address, error) {
 			addr, chainParams.Name)
 	}
 	if _, ok := addr.(*btcutil.AddressPubKeyHash); !ok {
-		return nil, fmt.Errorf("getrawchangeaddress: address %v is not P2PKH",
+		return nil, fmt.Errorf("address %v is not P2PKH",
 			addr)
 	}
 	return addr, nil
@@ -528,9 +528,9 @@ type builtContract struct {
 // wallet RPC to generate an internal address to redeem the refund and to sign
 // the payment to the contract transaction.
 func buildContract(c *rpc.Client, args *contractArgs) (*builtContract, error) {
-	refundAddr, err := getRawChangeAddress(c)
+	refundAddr, err := getUnusedAddress(c)
 	if err != nil {
-		return nil, fmt.Errorf("getrawchangeaddress: %v", err)
+		return nil, fmt.Errorf("getunusedaddress: %v", err)
 	}
 	refundAddrH, ok := refundAddr.(interface {
 		Hash160() *[ripemd160.Size]byte
@@ -614,7 +614,7 @@ func buildRefund(c *rpc.Client, contract []byte, contractTx *wire.MsgTx, feePerK
 		return nil, 0, errors.New("contract tx does not contain a P2SH contract payment")
 	}
 
-	refundAddress, err := getRawChangeAddress(c)
+	refundAddress, err := getUnusedAddress(c)
 	if err != nil {
 		return nil, 0, fmt.Errorf("getrawchangeaddress: %v", err)
 	}
@@ -793,7 +793,7 @@ func (cmd *redeemCmd) runCommand(c *rpc.Client) error {
 		return errors.New("transaction does not contain a contract output")
 	}
 
-	addr, err := getRawChangeAddress(c)
+	addr, err := getUnusedAddress(c)
 	if err != nil {
 		return fmt.Errorf("getrawchangeaddres: %v", err)
 	}
