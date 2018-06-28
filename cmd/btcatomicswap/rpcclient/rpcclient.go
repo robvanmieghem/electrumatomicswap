@@ -31,9 +31,10 @@ var (
 
 var (
 	// These fields are used to map the registered types to method names.
-	registerLock         sync.RWMutex
-	methodToConcreteType = make(map[string]reflect.Type)
-	concreteTypeToMethod = make(map[reflect.Type]string)
+	registerLock                                  sync.RWMutex
+	methodToConcreteType                          = make(map[string]reflect.Type)
+	concreteTypeToMethodsWithNamedParameters      = make(map[reflect.Type]string)
+	concreteTypeToMethodsWithPositionalParameters = make(map[reflect.Type]string)
 )
 
 const (
@@ -408,7 +409,7 @@ func (c *Client) handleSendPostMessage(details *sendPostDetails) {
 // configuration of the client.
 func (c *Client) sendCmd(cmd interface{}) chan *response {
 	// Get the method associated with the command.
-	method, err := CmdMethod(cmd)
+	method, _, err := CmdMethod(cmd)
 	if err != nil {
 		return newFutureError(err)
 	}
@@ -501,18 +502,20 @@ func receiveFuture(f chan *response) ([]byte, error) {
 // CmdMethod returns the method for the passed command.  The provided command
 // type must be a registered type.  All commands provided by this package are
 // registered by default.
-func CmdMethod(cmd interface{}) (string, error) {
+func CmdMethod(cmd interface{}) (method string, named bool, err error) {
 	// Look up the cmd type and error out if not registered.
 	rt := reflect.TypeOf(cmd)
 	registerLock.RLock()
-	method, ok := concreteTypeToMethod[rt]
+	method, unnamed := concreteTypeToMethodsWithPositionalParameters[rt]
+	if !unnamed {
+		method, named = concreteTypeToMethodsWithNamedParameters[rt]
+	}
 	registerLock.RUnlock()
-	if !ok {
-		str := fmt.Sprintf("%q is not registered", method)
-		return "", errors.New(str)
+	if !unnamed && !named {
+		err = fmt.Errorf("%q is not registered", method)
 	}
 
-	return method, nil
+	return
 }
 
 // RegisterCmd registers a new command that will automatically marshal to and
@@ -545,7 +548,7 @@ func CmdMethod(cmd interface{}) (string, error) {
 // passed struct, so it does not need to be an actual instance.  Therefore, it
 // is recommended to simply pass a nil pointer cast to the appropriate type.
 // For example, (*FooCmd)(nil).
-func RegisterCmd(method string, cmd interface{}) error {
+func RegisterCmd(method string, cmd interface{}, namedParameters bool) error {
 	registerLock.Lock()
 	defer registerLock.Unlock()
 
@@ -560,15 +563,22 @@ func RegisterCmd(method string, cmd interface{}) error {
 	}
 	// Update the registration maps.
 	methodToConcreteType[method] = rtp
-	concreteTypeToMethod[rtp] = method
+	if namedParameters {
+		concreteTypeToMethodsWithNamedParameters[rtp] = method
+	} else {
+		concreteTypeToMethodsWithPositionalParameters[rtp] = method
+	}
 	return nil
 }
 
+//---------
 //To remove
+//---------
+
 // SendRawTransaction submits the encoded transaction to the server which will
 // then relay it to the network.
 func (c *Client) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {
-	return nil, errors.New("SendRawTransactionnot implemented.")
+	return nil, errors.New("SendRawTransactionnot implemented")
 }
 
 // SignRawTransaction signs inputs for the passed transaction and returns the
@@ -579,5 +589,5 @@ func (c *Client) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainh
 // default signature hash type.  Use one of the SignRawTransaction# variants to
 // specify that information if needed.
 func (c *Client) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
-	return nil, false, errors.New("SignRawTransaction is not implemented.")
+	return nil, false, errors.New("SignRawTransaction is not implemented")
 }

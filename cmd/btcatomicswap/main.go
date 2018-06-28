@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -403,53 +402,29 @@ func createSig(tx *wire.MsgTx, idx int, pkScript []byte, addr btcutil.Address,
 	return sig, wif.PrivKey.PubKey().SerializeCompressed(), nil
 }
 
+// payTo calls a the payto JSON-RPC method,
+//It creates a funded ,unsigned transaction.
+func payTo(c *rpc.Client, destination btcutil.Address, amount btcutil.Amount) (fundedTx *wire.MsgTx, complete bool, fee btcutil.Amount, err error) {
+	fundedTx, complete, err = c.PayTo(destination, amount, false)
+	if err != nil {
+		return
+	}
+	var rawfee int64
+	for _, txin := range fundedTx.TxIn {
+		fmt.Println(txin)
+	}
+	for _, txout := range fundedTx.TxOut {
+		rawfee -= txout.Value
+	}
+	fee = btcutil.Amount(rawfee)
+	return
+}
+
 // fundRawTransaction calls the fundrawtransaction JSON-RPC method.  It is
 // implemented manually as client support is currently missing from the
 // btcd/rpcclient package.
 func fundRawTransaction(c *rpc.Client, tx *wire.MsgTx, feePerKb btcutil.Amount) (fundedTx *wire.MsgTx, fee btcutil.Amount, err error) {
-	var buf bytes.Buffer
-	buf.Grow(tx.SerializeSize())
-	tx.Serialize(&buf)
-	param0, err := json.Marshal(hex.EncodeToString(buf.Bytes()))
-	if err != nil {
-		return nil, 0, err
-	}
-	param1, err := json.Marshal(struct {
-		FeeRate float64 `json:"feeRate"`
-	}{
-		FeeRate: feePerKb.ToBTC(),
-	})
-	if err != nil {
-		return nil, 0, err
-	}
-	params := []json.RawMessage{param0, param1}
-	rawResp, err := c.RawRequest("fundrawtransaction", params)
-	if err != nil {
-		return nil, 0, err
-	}
-	var resp struct {
-		Hex       string  `json:"hex"`
-		Fee       float64 `json:"fee"`
-		ChangePos float64 `json:"changepos"`
-	}
-	err = json.Unmarshal(rawResp, &resp)
-	if err != nil {
-		return nil, 0, err
-	}
-	fundedTxBytes, err := hex.DecodeString(resp.Hex)
-	if err != nil {
-		return nil, 0, err
-	}
-	fundedTx = &wire.MsgTx{}
-	err = fundedTx.Deserialize(bytes.NewReader(fundedTxBytes))
-	if err != nil {
-		return nil, 0, err
-	}
-	feeAmount, err := btcutil.NewAmount(resp.Fee)
-	if err != nil {
-		return nil, 0, err
-	}
-	return fundedTx, feeAmount, nil
+	return nil, 0, errors.New("fundRawTransaction implemented")
 }
 
 // getFeePerKb queries the wallet for the current optimal fee rate per kilobyte,
@@ -548,28 +523,29 @@ func buildContract(c *rpc.Client, args *contractArgs) (*builtContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	contractP2SHPkScript, err := txscript.PayToAddrScript(contractP2SH)
-	if err != nil {
-		return nil, err
-	}
+	//contractP2SHPkScript, err := txscript.PayToAddrScript(contractP2SH)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	feePerKb, err := getFeePerKb(c)
 	if err != nil {
 		return nil, err
 	}
 
-	unsignedContract := wire.NewMsgTx(txVersion)
-	unsignedContract.AddTxOut(wire.NewTxOut(int64(args.amount), contractP2SHPkScript))
-	unsignedContract, contractFee, err := fundRawTransaction(c, unsignedContract, feePerKb)
+	contractTx, complete, contractFee, err := payTo(c, contractP2SH, btcutil.Amount(args.amount))
+	// unsignedContract := wire.NewMsgTx(txVersion)
+	// unsignedContract.AddTxOut(wire.NewTxOut(int64(args.amount), contractP2SHPkScript))
+	// unsignedContract, contractFee, err := fundRawTransaction(c, unsignedContract, feePerKb)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("fundrawtransaction: %v", err)
+	// }
+	// contractTx, complete, err := c.SignRawTransaction(unsignedContract)
 	if err != nil {
-		return nil, fmt.Errorf("fundrawtransaction: %v", err)
-	}
-	contractTx, complete, err := c.SignRawTransaction(unsignedContract)
-	if err != nil {
-		return nil, fmt.Errorf("signrawtransaction: %v", err)
+		return nil, fmt.Errorf("payTo: %v", err)
 	}
 	if !complete {
-		return nil, errors.New("signrawtransaction: failed to completely sign contract transaction")
+		return nil, errors.New("payTo: failed to completely sign contract transaction")
 	}
 
 	contractTxHash := contractTx.TxHash()

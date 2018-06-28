@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 
+	"github.com/btcsuite/btcutil"
+
 	"github.com/robvanmieghem/electrumatomicswap/cmd/btcatomicswap/rpcclient"
 )
 
@@ -28,10 +30,19 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("Unused Address : %s", addr)
+
 	feerate, err := client.GetFeeRate()
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Feerate/Kb: %f", feerate.ToBTC())
+	log.Printf("Feerate: %f BTC/KB", feerate.ToBTC())
 
+	amount, err := btcutil.NewAmount(0.01)
+
+	tx, complete, err := client.PayTo(addr, amount, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Transaction:", tx)
+	log.Println("Complete:", complete)
 }

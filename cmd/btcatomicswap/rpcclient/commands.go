@@ -1,9 +1,12 @@
 package rpcclient
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 )
 
@@ -152,8 +155,76 @@ func (c *Client) GetFeeRate() (btcutil.Amount, error) {
 	return c.GetFeeRateAsync().Receive()
 }
 
+// FuturePayToResult is a future promise to deliver the result of
+// a payto  RPC invocation (or an applicable error).
+type FuturePayToResult chan *response
+
+// Receive waits for the response promised by the future and returns the transaction  and wether or not it is complete ( signed).
+func (r FuturePayToResult) Receive() (tx *wire.MsgTx, complete bool, err error) {
+	rawResp, err := receiveFuture(r)
+	if err != nil {
+		return
+	}
+	var resp struct {
+		Complete bool   `json:"complete"`
+		FDinal   bool   ` json:"final"`
+		Hex      string `json:"hex"`
+	}
+
+	// Unmarshal result
+	err = json.Unmarshal(rawResp, &resp)
+	if err != nil {
+		return
+	}
+	complete = resp.Complete
+	fundedTxBytes, err := hex.DecodeString(resp.Hex)
+	if err != nil {
+		return nil, false, err
+	}
+	tx = &wire.MsgTx{}
+	err = tx.Deserialize(bytes.NewReader(fundedTxBytes))
+	if err != nil {
+		return nil, false, err
+	}
+
+	return
+}
+
+// PayToCmd defines the payto RPC command.
+type PayToCmd struct {
+	Destination string  `json:"destination"`
+	Amount      float64 `json:"amount"`
+	UnSigned    bool    `json:"unsigned"`
+}
+
+// NewPayToCmd returns a new instance which can be used to issue a
+// payto JSON-RPC command.
+func NewPayToCmd(destination btcutil.Address, amount btcutil.Amount, unsigned bool) *PayToCmd {
+	return &PayToCmd{
+		Destination: destination.EncodeAddress(),
+		Amount:      amount.ToBTC(),
+		UnSigned:    unsigned,
+	}
+}
+
+// PayToAsync returns an instance of a type that can be used to
+// get the result of the RPC at some future time by invoking the Receive
+// function on the returned instance.
+//
+// See PayTo for the blocking version and more details.
+func (c *Client) PayToAsync(destination btcutil.Address, amount btcutil.Amount, unsigned bool) FuturePayToResult {
+	cmd := NewPayToCmd(destination, amount, unsigned)
+	return c.sendCmd(cmd)
+}
+
+// PayTo returns a funded transaction
+func (c *Client) PayTo(destination btcutil.Address, amount btcutil.Amount, unsigned bool) (tx *wire.MsgTx, complete bool, err error) {
+	return c.PayToAsync(destination, amount, unsigned).Receive()
+}
+
 func init() {
-	RegisterCmd("getunusedaddress", (*GetUnusedAddressCmd)(nil))
-	RegisterCmd("getprivatekeys", (*GetPrivateKeysCmd)(nil))
-	RegisterCmd("getfeerate", (*GetFeeRateCmd)(nil))
+	RegisterCmd("getunusedaddress", (*GetUnusedAddressCmd)(nil), false)
+	RegisterCmd("getprivatekeys", (*GetPrivateKeysCmd)(nil), false)
+	RegisterCmd("getfeerate", (*GetFeeRateCmd)(nil), false)
+	RegisterCmd("payto", (*PayToCmd)(nil), true)
 }

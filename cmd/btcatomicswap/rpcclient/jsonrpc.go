@@ -56,13 +56,13 @@ func IsValidIDType(id interface{}) bool {
 // requests, however this struct it being exported in case the caller wants to
 // construct raw requests for some reason.
 type Request struct {
-	Jsonrpc string            `json:"jsonrpc"`
-	Method  string            `json:"method"`
-	Params  []json.RawMessage `json:"params"`
-	ID      interface{}       `json:"id"`
+	Jsonrpc string      `json:"jsonrpc"`
+	Method  string      `json:"method"`
+	Params  interface{} `json:"params"`
+	ID      interface{} `json:"id"`
 }
 
-// NewRequest returns a new JSON-RPC 1.0 request object given the provided id,
+// NewRequestWithPositionalParameters returns a new JSON-RPC 1.0 request object given the provided id,
 // method, and parameters.  The parameters are marshalled into a json.RawMessage
 // for the Params field of the returned request object.  This function is only
 // provided in case the caller wants to construct raw requests for some reason.
@@ -70,7 +70,7 @@ type Request struct {
 // Typically callers will instead want to create a registered concrete command
 // type with the NewCmd or New<Foo>Cmd functions and call the MarshalCmd
 // function with that command to generate the marshalled JSON-RPC request.
-func NewRequest(id interface{}, method string, params []interface{}) (*Request, error) {
+func NewRequestWithPositionalParameters(id interface{}, method string, params []interface{}) (*Request, error) {
 	if !IsValidIDType(id) {
 		str := fmt.Sprintf("the id of type '%T' is invalid", id)
 		return nil, errors.New(str)
@@ -94,7 +94,23 @@ func NewRequest(id interface{}, method string, params []interface{}) (*Request, 
 	}, nil
 }
 
+// NewRequestWithNamedParameters should be merged with NewRequestWithPositionalParameters
+func NewRequestWithNamedParameters(id interface{}, method string, params interface{}) (*Request, error) {
+	if !IsValidIDType(id) {
+		str := fmt.Sprintf("the id of type '%T' is invalid", id)
+		return nil, errors.New(str)
+	}
+
+	return &Request{
+		Jsonrpc: "1.0",
+		ID:      id,
+		Method:  method,
+		Params:  params,
+	}, nil
+}
+
 // makeParams creates a slice of interface values for the given struct.
+//It is useful for positional parameters only.
 func makeParams(rt reflect.Type, rv reflect.Value) []interface{} {
 	numFields := rt.NumField()
 	params := make([]interface{}, 0, numFields)
@@ -118,14 +134,10 @@ func makeParams(rt reflect.Type, rv reflect.Value) []interface{} {
 // must be a registered type.  All commands provided by this package are
 // registered by default.
 func MarshalCmd(id interface{}, cmd interface{}) ([]byte, error) {
-	// Look up the cmd type and error out if not registered.
-	rt := reflect.TypeOf(cmd)
-	registerLock.RLock()
-	method, ok := concreteTypeToMethod[rt]
-	registerLock.RUnlock()
-	if !ok {
-		str := fmt.Sprintf("%q is not registered", method)
-		return nil, errors.New(str)
+
+	method, namedParameters, err := CmdMethod(cmd)
+	if err != nil {
+		return nil, err
 	}
 
 	// The provided command must not be nil.
@@ -135,15 +147,22 @@ func MarshalCmd(id interface{}, cmd interface{}) ([]byte, error) {
 		return nil, errors.New(str)
 	}
 
-	// Create a slice of interface values in the order of the struct fields
-	// while respecting pointer fields as optional params and only adding
-	// them if they are non-nil.
-	params := makeParams(rt.Elem(), rv.Elem())
+	var rawCmd *Request
+	if !namedParameters {
+		// Create a slice of interface values in the order of the struct fields
+		// while respecting pointer fields as optional params and only adding
+		// them if they are non-nil.
+		rt := reflect.TypeOf(cmd)
+		params := makeParams(rt.Elem(), rv.Elem())
+		rawCmd, err = NewRequestWithPositionalParameters(id, method, params)
+	} else {
+		rawCmd, err = NewRequestWithNamedParameters(id, method, cmd)
+	}
 
-	// Generate and marshal the final JSON-RPC request.
-	rawCmd, err := NewRequest(id, method, params)
 	if err != nil {
 		return nil, err
 	}
+	//marshal the final JSON-RPC request.
 	return json.Marshal(rawCmd)
+
 }
