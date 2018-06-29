@@ -39,10 +39,20 @@ func main() {
 
 	amount, err := btcutil.NewAmount(0.01)
 
-	tx, complete, err := client.PayTo(addr, amount, true)
+	tx, _, err := client.PayTo(addr, amount, true)
 	if err != nil {
 		log.Fatal(err)
 	}
+	for _, txin := range tx.TxIn {
+		log.Println(txin.PreviousOutPoint)
+		log.Println(txin.PreviousOutPoint.Hash, txin.PreviousOutPoint.Index)
+	}
 	log.Println("Transaction:", tx)
-	log.Println("Complete:", complete)
+	utxos, err := client.ListUnspent()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, utxo := range utxos {
+		log.Println("Unspent output for address", utxo.Address, ":", utxo.Value, ", outpoint:", utxo.OutPoint)
+	}
 }

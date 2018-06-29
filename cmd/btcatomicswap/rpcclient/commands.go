@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
+
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
@@ -222,9 +225,96 @@ func (c *Client) PayTo(destination btcutil.Address, amount btcutil.Amount, unsig
 	return c.PayToAsync(destination, amount, unsigned).Receive()
 }
 
+//UnspentOutput represents an unspent output
+type UnspentOutput struct {
+	Address  btcutil.Address
+	Value    btcutil.Amount
+	OutPoint *wire.OutPoint
+	Height   int64
+}
+
+// ListUnspentCmd defines the listunspent RPC command.
+type ListUnspentCmd struct {
+}
+
+// NewListUnspentCmd returns a new instance which can be used to issue a
+// getfeerate JSON-RPC command.
+func NewListUnspentCmd() *ListUnspentCmd {
+	return &ListUnspentCmd{}
+}
+
+// FutureListUnspentResult is a future promise to deliver the result of
+// a listunspent RPC invocation (or an applicable error).
+type FutureListUnspentResult chan *response
+
+// Receive waits for the response promised by the future and returns the decode unspent outputs.
+func (r FutureListUnspentResult) Receive() (utxos []*UnspentOutput, err error) {
+	rawResp, err := receiveFuture(r)
+	if err != nil {
+		return
+	}
+	type respUtxo struct {
+		Address     string `json:"address"`
+		Value       string `json:"value"`
+		PrevoutN    uint32 `json:"prevout_n"`
+		PrevoutHash string `json:"prevout_hash"`
+		Height      int64  `json:"height"`
+		Coinbase    bool   `json:"coinbase"`
+	}
+	var resp []respUtxo
+	// Unmarshal result
+	err = json.Unmarshal(rawResp, &resp)
+	if err != nil {
+		return
+	}
+	utxos = make([]*UnspentOutput, len(resp))
+	for i, respUtxo := range resp {
+		utxo := &UnspentOutput{
+			Height: respUtxo.Height,
+		}
+		value, err := strconv.ParseFloat(respUtxo.Value, 64)
+		if err != nil {
+			return nil, err
+		}
+		utxo.Value, err = btcutil.NewAmount(value)
+		if err != nil {
+			return nil, err
+		}
+		utxo.Address, err = btcutil.DecodeAddress(respUtxo.Address, nil)
+		hash, err := chainhash.NewHashFromStr(respUtxo.PrevoutHash)
+		if err != nil {
+			return nil, err
+		}
+		utxo.OutPoint = wire.NewOutPoint(hash, respUtxo.PrevoutN)
+		if err != nil {
+			return nil, err
+		}
+		utxos[i] = utxo
+	}
+
+	return
+}
+
+// ListUnspentAsync returns an instance of a type that can be used to
+// get the result of the RPC at some future time by invoking the Receive
+// function on the returned instance.
+//
+// See ListUnspent for the blocking version and more details.
+func (c *Client) ListUnspentAsync() FutureListUnspentResult {
+	cmd := NewListUnspentCmd()
+	return c.sendCmd(cmd)
+}
+
+//ListUnspent returns the list of unspent transaction outputs in the
+//wallet by issuing a listunspent JSON-RPC command.
+func (c *Client) ListUnspent() ([]*UnspentOutput, error) {
+	return c.ListUnspentAsync().Receive()
+}
+
 func init() {
 	RegisterCmd("getunusedaddress", (*GetUnusedAddressCmd)(nil), false)
 	RegisterCmd("getprivatekeys", (*GetPrivateKeysCmd)(nil), false)
 	RegisterCmd("getfeerate", (*GetFeeRateCmd)(nil), false)
 	RegisterCmd("payto", (*PayToCmd)(nil), true)
+	RegisterCmd("listunspent", (*ListUnspentCmd)(nil), false)
 }
