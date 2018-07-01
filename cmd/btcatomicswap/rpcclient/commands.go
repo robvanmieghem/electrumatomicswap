@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 
@@ -77,13 +78,14 @@ func (r FutureDumpPrivKeyResult) Receive() (*btcutil.WIF, error) {
 	}
 
 	// Unmarshal result as a string.
-	var privKeyWIF string
-	err = json.Unmarshal(res, &privKeyWIF)
+	var rawprivKeyWIF string
+	err = json.Unmarshal(res, &rawprivKeyWIF)
 	if err != nil {
 		return nil, err
 	}
-
-	return btcutil.DecodeWIF(privKeyWIF)
+	//Drop the "p2pkh:" prefix
+	rawprivKeyWIF = strings.TrimPrefix(rawprivKeyWIF, "p2pkh:")
+	return btcutil.DecodeWIF(rawprivKeyWIF)
 }
 
 // DumpPrivKeyAsync returns an instance of a type that can be used to get the
@@ -106,15 +108,20 @@ func (c *Client) DumpPrivKey(address btcutil.Address) (*btcutil.WIF, error) {
 
 // GetPrivateKeysCmd defines the getprivatekeys JSON-RPC command.
 type GetPrivateKeysCmd struct {
-	Addresses []string
+	Address string
 }
 
 // NewGetPrivateKeysCmd returns a new instance which can be used to issue a
 // getprivatekeys JSON-RPC command.
-func NewGetPrivateKeysCmd(addresses ...string) *GetPrivateKeysCmd {
-	return &GetPrivateKeysCmd{
-		Addresses: addresses,
+func NewGetPrivateKeysCmd(addresses ...string) (cmd *GetPrivateKeysCmd) {
+	cmd = &GetPrivateKeysCmd{}
+	for i, address := range addresses {
+		if i != 0 {
+			cmd.Address += ","
+		}
+		cmd.Address += address
 	}
+	return
 }
 
 // FutureGetFeeRateResult is a future promise to deliver the result of

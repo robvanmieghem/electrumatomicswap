@@ -403,15 +403,35 @@ func createSig(tx *wire.MsgTx, idx int, pkScript []byte, addr btcutil.Address,
 }
 
 // payTo calls a the payto JSON-RPC method,
-//It creates a funded ,unsigned transaction.
-func payTo(c *rpc.Client, destination btcutil.Address, amount btcutil.Amount) (fundedTx *wire.MsgTx, complete bool, fee btcutil.Amount, err error) {
-	fundedTx, complete, err = c.PayTo(destination, amount, false)
+//It creates a funded ,signed transaction.
+func payTo(c *rpc.Client, destination btcutil.Address, amount btcutil.Amount) (fundedTx *wire.MsgTx, fee btcutil.Amount, err error) {
+	fundedTx, complete, err := c.PayTo(destination, amount, false)
 	if err != nil {
 		return
 	}
+	if !complete {
+		err = errors.New("payto:Created transaction is not complete")
+	}
+	//Fetch all unspent outputs from the wallet in order to calculate the fee
+	utxos, err := c.ListUnspent()
+	if err != nil {
+		return
+	}
+	findUtxofunc := func(outPoint wire.OutPoint) (*rpc.UnspentOutput, error) {
+		for _, utxo := range utxos {
+			if outPoint.Hash.IsEqual(&utxo.OutPoint.Hash) && outPoint.Index == utxo.OutPoint.Index {
+				return utxo, nil
+			}
+		}
+		return nil, fmt.Errorf("no utxo found for used input %s", outPoint)
+	}
 	var rawfee int64
 	for _, txin := range fundedTx.TxIn {
-		fmt.Println(txin)
+		utxo, err := findUtxofunc(txin.PreviousOutPoint)
+		if err != nil {
+			return nil, 0, err
+		}
+		rawfee += int64(utxo.Value)
 	}
 	for _, txout := range fundedTx.TxOut {
 		rawfee -= txout.Value
@@ -533,7 +553,7 @@ func buildContract(c *rpc.Client, args *contractArgs) (*builtContract, error) {
 		return nil, err
 	}
 
-	contractTx, complete, contractFee, err := payTo(c, contractP2SH, btcutil.Amount(args.amount))
+	contractTx, contractFee, err := payTo(c, contractP2SH, btcutil.Amount(args.amount))
 	// unsignedContract := wire.NewMsgTx(txVersion)
 	// unsignedContract.AddTxOut(wire.NewTxOut(int64(args.amount), contractP2SHPkScript))
 	// unsignedContract, contractFee, err := fundRawTransaction(c, unsignedContract, feePerKb)
@@ -543,9 +563,6 @@ func buildContract(c *rpc.Client, args *contractArgs) (*builtContract, error) {
 	// contractTx, complete, err := c.SignRawTransaction(unsignedContract)
 	if err != nil {
 		return nil, fmt.Errorf("payTo: %v", err)
-	}
-	if !complete {
-		return nil, errors.New("payTo: failed to completely sign contract transaction")
 	}
 
 	contractTxHash := contractTx.TxHash()
@@ -592,7 +609,7 @@ func buildRefund(c *rpc.Client, contract []byte, contractTx *wire.MsgTx, feePerK
 
 	refundAddress, err := getUnusedAddress(c)
 	if err != nil {
-		return nil, 0, fmt.Errorf("getrawchangeaddress: %v", err)
+		return nil, 0, fmt.Errorf("getunusedaddress: %v", err)
 	}
 	refundOutScript, err := txscript.PayToAddrScript(refundAddress)
 	if err != nil {
