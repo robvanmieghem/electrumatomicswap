@@ -16,9 +16,6 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
-
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 )
 
 var (
@@ -569,25 +566,4 @@ func RegisterCmd(method string, cmd interface{}, namedParameters bool) error {
 		concreteTypeToMethodsWithPositionalParameters[rtp] = method
 	}
 	return nil
-}
-
-//---------
-//To remove
-//---------
-
-// SendRawTransaction submits the encoded transaction to the server which will
-// then relay it to the network.
-func (c *Client) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {
-	return nil, errors.New("SendRawTransactionnot implemented")
-}
-
-// SignRawTransaction signs inputs for the passed transaction and returns the
-// signed transaction as well as whether or not all inputs are now signed.
-//
-// This function assumes the RPC server already knows the input transactions and
-// private keys for the passed transaction which needs to be signed and uses the
-// default signature hash type.  Use one of the SignRawTransaction# variants to
-// specify that information if needed.
-func (c *Client) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
-	return nil, false, errors.New("SignRawTransaction is not implemented")
 }

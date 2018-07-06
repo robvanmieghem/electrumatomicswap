@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -318,10 +320,97 @@ func (c *Client) ListUnspent() ([]*UnspentOutput, error) {
 	return c.ListUnspentAsync().Receive()
 }
 
+// FutureBroadcastResult is a future promise to deliver the result of
+// a broadcast RPC invocation (or an applicable error).
+type FutureBroadcastResult chan *response
+
+// Receive waits for the response promised by the future and returns a the feerate.
+func (r FutureBroadcastResult) Receive() (*chainhash.Hash, error) {
+	rawResponse, err := receiveFuture(r)
+	var resp []interface{}
+	err = json.Unmarshal(rawResponse, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp) < 2 {
+		return nil, fmt.Errorf("Invalid response: %s", string(rawResponse))
+	}
+	txID, ok := resp[1].(string)
+	if !ok {
+		return nil, fmt.Errorf("Invalid response: %s", string(rawResponse))
+	}
+	return chainhash.NewHashFromStr(txID)
+}
+
+// BroadcastCmd defines the  broadcast RPC command.
+type BroadcastCmd struct {
+	SerializedTransaction string
+}
+
+// NewBroadcastCmd returns a new instance which can be used to issue a
+// broadcast JSON-RPC command.
+func NewBroadcastCmd(tx *wire.MsgTx) (cmd *BroadcastCmd) {
+	cmd = &BroadcastCmd{}
+	var buf bytes.Buffer
+	buf.Grow(tx.SerializeSize())
+	err := tx.Serialize(&buf)
+	if err != nil {
+		//This should never happen
+		panic(err)
+	}
+
+	cmd.SerializedTransaction = hex.EncodeToString(buf.Bytes())
+
+	return
+}
+
+// BroadcastAsync returns an instance of a type that can be used to
+// get the result of the RPC at some future time by invoking the Receive
+// function on the returned instance.
+//
+// See Broadcast for the blocking version and more details.
+func (c *Client) BroadcastAsync(tx *wire.MsgTx) FutureBroadcastResult {
+	cmd := NewBroadcastCmd(tx)
+	return c.sendCmd(cmd)
+}
+
+//Broadcast a transaction to the network
+//by issuing a broadcast  JSON-RPC command
+func (c *Client) Broadcast(tx *wire.MsgTx) (*chainhash.Hash, error) {
+	return c.BroadcastAsync(tx).Receive()
+}
+
+//-----------------------
+// Btc-Core compatibility
+//-----------------------
+
+// SendRawTransaction submits the encoded transaction to the server which will
+// then relay it to the network.
+//The allowHighFees parameter is ignored.
+func (c *Client) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {
+	return c.Broadcast(tx)
+}
+
 func init() {
 	RegisterCmd("getunusedaddress", (*GetUnusedAddressCmd)(nil), false)
 	RegisterCmd("getprivatekeys", (*GetPrivateKeysCmd)(nil), false)
 	RegisterCmd("getfeerate", (*GetFeeRateCmd)(nil), false)
 	RegisterCmd("payto", (*PayToCmd)(nil), true)
 	RegisterCmd("listunspent", (*ListUnspentCmd)(nil), false)
+	RegisterCmd("broadcast", (*BroadcastCmd)(nil), false)
+}
+
+//-----------------------
+// Btc-Core compatibility
+//-----------------------
+
+// SignRawTransaction signs inputs for the passed transaction and returns the
+// signed transaction as well as whether or not all inputs are now signed.
+//
+// This function assumes the RPC server already knows the input transactions and
+// private keys for the passed transaction which needs to be signed and uses the
+// default signature hash type.  Use one of the SignRawTransaction# variants to
+// specify that information if needed.
+func (c *Client) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
+	return nil, false, errors.New("SignRawTransaction is not implemented")
 }

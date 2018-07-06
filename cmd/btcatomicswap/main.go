@@ -444,7 +444,7 @@ func payTo(c *rpc.Client, destination btcutil.Address, amount btcutil.Amount) (f
 // implemented manually as client support is currently missing from the
 // btcd/rpcclient package.
 func fundRawTransaction(c *rpc.Client, tx *wire.MsgTx, feePerKb btcutil.Amount) (fundedTx *wire.MsgTx, fee btcutil.Amount, err error) {
-	return nil, 0, errors.New("fundRawTransaction implemented")
+	return nil, 0, errors.New("fundRawTransaction  notimplemented")
 }
 
 // getFeePerKb queries the wallet for the current optimal fee rate per kilobyte,
