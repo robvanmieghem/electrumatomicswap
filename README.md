@@ -16,7 +16,7 @@ The swaps are compatible with the ones performed by the Decred swap tools.
 ### Bitcoin:
 - Initiate: Done
 - participate: Todo
-- Audit: To test
+- Audit: Done
 - Refund: Done
 - Redeem: Todo
 
