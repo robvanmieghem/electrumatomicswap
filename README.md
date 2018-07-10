@@ -13,11 +13,11 @@ The swaps are compatible with the ones performed by the Decred swap tools.
 
 ## Status
 
-### Bitcoin::
+### Bitcoin:
 - Initiate: Done
 - participate: Todo
 - Audit: To test
-- Refund: Todo
+- Refund: Done
 - Redeem: Todo
 
 ### Litecoin: TODO
