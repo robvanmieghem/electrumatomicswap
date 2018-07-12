@@ -2,24 +2,20 @@
 
 [Decred atomic swaps](https://github.com/decred/atomicswap) for the electrum wallet.
 
-This repo contains utilities to manually perform cross-chain atomic swaps
-using the electrum wallet.  In a first phase, support will be added  for
-the following coins and wallets:
+This repository contains utilities to manually perform cross-chain atomic swaps
+using  electrum wallets. Currently only the Bitcoin Electrum wallet is supported:
 
 * Bitcoin ([Electrum](https://electrum.org/))
-* Litecoin ([Electrum-ltc](https://electrum-ltc.org))
 
 The swaps are compatible with the ones performed by the Decred swap tools.
 
-## Status
+## Roadmap
 
-### Bitcoin:
-- Initiate: Done
-- participate: Todo
-- Audit: Done
-- Refund: Done
-- Redeem: Todo
+Add support for 
+* Litecoin ([Electrum-ltc](https://electrum-ltc.org))
 
-### Litecoin: TODO
+And more coins later on.
+
+
 
 
